@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+    
+    tools {
+         jdk 'jdk11'
+         maven 'maven3'
+     }
+     
+     environment {
+         SCANNER_HOME= tool 'sonar-scanner'
+     }
+     
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/jaiswaladi246/Ekart.git'
+            }
+        }
+        
+        stage('Compile') {
+            steps {
+                sh "mvn clean compile"
+            }
+        }
+        stage('Sonarqube Analysis') {
+            steps {
+                         sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.url=http://localhost:9000/ -Dsonar.login=squ_ac914a33f584fe3f8269ab0bf93e3d8d3975ef4c  -Dsonar.projectName=shopping-cart \
+                         -Dsonar.java.binaries=. \
+                         -Dsonar.projectKey=shopping-cart '''
+            }
+        }
+        
+        stage('OWASP SCAN') {
+            steps {
+            dependencyCheck additionalArguments: ' --scan ./', odcInstallation: 'DP'
+              dependencyCheckPublisher pattern:  '**/dependency-check-report.xml'
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+              sh "mvn clean install -DskipTests=true"
+            }
+        }
+        
+        stage(' Build and push Docker Image') {
+            steps {
+               script{
+                   withDockerRegistry(credentialsId: '3ce39d15-f2e7-4d22-ae85-768997733fdb' , toolName: 'docker') {
+                             sh "docker build -t shopping:latest -f docker/Dockerfile ."
+                             sh "docker tag shopping:latest dikshaop/shopping:latest"
+                             sh "docker push dikshaop/shopping:latest"
+               }
+            }
+        }
+    }
+        
+        stage('Trigger CD Pipeline') {
+            steps {
+              build job: "CD_Pipeline" , wait: true
+            }
+        }
+    
+    
+    
+    
+        
+       
+    }
+}
